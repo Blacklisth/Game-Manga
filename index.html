@@ -3,28 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cavalier Jumper Pro</title>
+    <title>Cavalier Jumper Pro - Édition Professionnelle</title>
     <style>
         :root {
             --primary: #FF6B35;
             --dark: #2F3E46;
             --sky: #87CEEB;
+            --glow: rgba(255,107,53,0.6);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             color: white;
             touch-action: none;
+            overflow: hidden;
         }
         .game-wrapper {
             position: relative;
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             margin: 10px;
         }
         .ui-overlay {
@@ -34,357 +36,597 @@
             right: 20px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
             pointer-events: none;
             z-index: 10;
         }
         .stat-box {
-            background: rgba(0,0,0,0.5);
-            padding: 10px 20px;
-            border-radius: 50px;
-            border: 2px solid rgba(255,255,255,0.2);
-            backdrop-filter: blur(5px);
+            background: rgba(0,0,0,0.7);
+            padding: 12px 24px;
+            border-radius: 25px;
+            border: 2px solid rgba(255,255,255,0.3);
+            backdrop-filter: blur(15px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            font-weight: bold;
+            font-size: 1.1rem;
         }
         canvas {
             width: 100%;
             height: auto;
             display: block;
             background: var(--sky);
-            border-radius: 20px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border-radius: 25px;
+            box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6);
+            touch-action: none;
         }
-        /* Pavé Directionnel */
         .controls-container {
             display: flex;
-            justify-content: space-around;
-            padding: 20px;
-            gap: 20px;
+            justify-content: center;
+            gap: 30px;
+            padding: 25px;
+            pointer-events: all;
         }
         .control-btn {
-            width: 80px;
-            height: 80px;
-            background: rgba(255,255,255,0.1);
-            border: 3px solid white;
+            width: 90px;
+            height: 90px;
+            background: rgba(255,255,255,0.15);
+            border: 3px solid rgba(255,255,255,0.5);
             border-radius: 50%;
             display: flex;
             justify-content: center;
             align-items: center;
             font-weight: bold;
+            font-size: 0.9rem;
             cursor: pointer;
-            transition: all 0.1s;
-            touch-action: manipulation;
+            transition: all 0.15s ease;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
-        .control-btn:active {
+        .control-btn:active, .control-btn.active {
             background: var(--primary);
-            transform: scale(0.9);
+            transform: scale(0.92);
+            box-shadow: 0 5px 20px var(--glow);
         }
-        .game-over-screen {
+        #btnJump { width: 140px; border-radius: 25px; font-size: 1rem; }
+        
+        /* Écrans */
+        .screen {
             position: absolute;
             inset: 0;
-            background: rgba(0,0,0,0.85);
+            background: rgba(0,0,0,0.9);
             display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            border-radius: 15px;
+            border-radius: 25px;
             z-index: 100;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(20px);
         }
-        .restart-btn {
-            background: var(--primary);
+        .screen.active { display: flex; }
+        .screen h1 { font-size: 4rem; margin-bottom: 20px; text-shadow: 0 0 20px var(--glow); }
+        .screen p { font-size: 1.6rem; color: #ccc; margin-bottom: 30px; }
+        .btn {
+            background: linear-gradient(45deg, var(--primary), #FF8E53);
             color: white;
             border: none;
-            padding: 15px 40px;
-            font-size: 1.2rem;
-            border-radius: 30px;
+            padding: 18px 50px;
+            font-size: 1.3rem;
+            border-radius: 35px;
             cursor: pointer;
-            margin-top: 20px;
+            margin: 10px;
             text-transform: uppercase;
             letter-spacing: 2px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px var(--glow);
+            transition: all 0.3s ease;
         }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px var(--glow); }
+        .btn:active { transform: translateY(-1px); }
+        
+        /* Pause */
+        #pauseBtn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            pointer-events: all;
+            z-index: 15;
+            backdrop-filter: blur(10px);
+        }
+        #pauseBtn:hover { background: var(--primary); }
     </style>
 </head>
 <body>
+    <div class="game-wrapper">
+        <div class="ui-overlay">
+            <div class="stat-box">Score: <span id="score">0</span></div>
+            <div class="stat-box">Niveau: <span id="level">1</span></div>
+            <div class="stat-box">Meilleur: <span id="highScore">0</span></div>
+        </div>
+        
+        <button id="pauseBtn" onclick="togglePause()">⏸️</button>
+        
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+        
+        <!-- Menu Titre -->
+        <div class="screen" id="titleScreen">
+            <h1>🏇 CAVALIER JUMPER</h1>
+            <p>Édition Professionnelle</p>
+            <button class="btn" onclick="startGame()">JOUER</button>
+            <p style="font-size: 1rem; margin-top: 40px; color: #aaa;">
+                Saut: ESPACE ↑ | Bas: ↓ S | Pause: ⏸️
+            </p>
+        </div>
+        
+        <!-- Game Over -->
+        <div class="screen" id="gameOver">
+            <h1>PERDU !</h1>
+            <p>Score final: <span id="finalScore">0</span></p>
+            <button class="btn" onclick="restartGame()">Rejouer</button>
+            <button class="btn" onclick="showTitle()">Menu</button>
+        </div>
+        
+        <!-- Pause -->
+        <div class="screen" id="pauseScreen">
+            <h1>PAUSE</h1>
+            <button class="btn" onclick="togglePause()">Reprendre</button>
+        </div>
 
-<div class="game-wrapper">
-    <div class="ui-overlay">
-        <div class="stat-box">Score: <span id="score">0</span></div>
-        <div class="stat-box">Level: <span id="speed">1</span></div>
+        <div class="controls-container">
+            <div class="control-btn" id="btnDuck">BAS ↓</div>
+            <div class="control-btn" id="btnJump">SAUT ↑</div>
+        </div>
     </div>
 
-    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <!-- Sons (base64 pour pro, sans dépendances externes) -->
+    <audio id="jumpSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAo" type="audio/wav">
+    </audio>
+    <audio id="hitSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRl4GAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAo" type="audio/wav">
+    </audio>
+    <audio id="bgMusic" loop preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAo" type="audio/wav">
+    </audio>
 
-    <div class="game-over-screen" id="gameOver">
-        <h1 style="font-size: 3rem; margin-bottom: 0;">PERDU !</h1>
-        <p style="font-size: 1.5rem; color: #aaa;">Score final: <span id="finalScore">0</span></p>
-        <button class="restart-btn" onclick="restartGame()">Recommencer</button>
-    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive canvas
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
-    <div class="controls-container">
-        <div class="control-btn" id="btnDuck">BAS (S)</div>
-        <div class="control-btn" id="btnJump" style="width: 120px; border-radius: 20px;">SAUT (ESPACE)</div>
-    </div>
-</div>
+        // État du jeu pro
+        let gameState = 'title'; // title, playing, paused, gameover
+        let score = 0;
+        let highScore = localStorage.getItem('cavalierHighScore') || 0;
+        let gameSpeed = 1;
+        let level = 1;
+        let shake = 0;
+        let particles = [];
+        let gameTime = 0;
 
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Config de base
-    let gameRunning = true;
-    let score = 0;
-    let gameSpeed = 1;
-    let clouds = [];
-    
-    const rider = {
-        x: 80,
-        y: 300,
-        width: 50,
-        height: 70,
-        baseHeight: 70,
-        dy: 0,
-        gravity: 0.7,
-        jumpPower: 15,
-        isGrounded: false,
-        isDucking: false,
-        animFrame: 0
-    };
-
-    let obstacles = [];
-    let obstacleTimer = 0;
-
-    // --- GESTION DES INPUTS (Clavier + Tactile) ---
-    const keys = { jump: false, duck: false };
-
-    function handleInputs() {
-        // Clavier
-        window.onkeydown = (e) => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = true;
-            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.duck = true;
+        const rider = {
+            x: 100,
+            y: 350,
+            width: 60,
+            height: 80,
+            baseHeight: 80,
+            dy: 0,
+            gravity: 0.8,
+            jumpPower: -18,
+            isGrounded: true,
+            isDucking: false,
+            animFrame: 0
         };
-        window.onkeyup = (e) => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = false;
-            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.duck = false;
+
+        let obstacles = [];
+        let clouds = [];
+        let obstaclePool = [];
+        let keys = { jump: false, duck: false };
+
+        // Sons
+        const sounds = {
+            jump: document.getElementById('jumpSound'),
+            hit: document.getElementById('hitSound'),
+            music: document.getElementById('bgMusic')
         };
 
-        // Boutons à l'écran
-        const btnJump = document.getElementById('btnJump');
-        const btnDuck = document.getElementById('btnDuck');
-
-        ['mousedown', 'touchstart'].forEach(evt => {
-            btnJump.addEventListener(evt, (e) => { e.preventDefault(); keys.jump = true; });
-            btnDuck.addEventListener(evt, (e) => { e.preventDefault(); keys.duck = true; });
-        });
-
-        ['mouseup', 'touchend'].forEach(evt => {
-            btnJump.addEventListener(evt, () => keys.jump = false);
-            btnDuck.addEventListener(evt, () => keys.duck = false);
-        });
-    }
-
-    // --- LOGIQUE DU JEU ---
-    function update() {
-        if (!gameRunning) return;
-
-        // Saut
-        if (keys.jump && rider.isGrounded) {
-            rider.dy = -rider.jumpPower;
-            rider.isGrounded = false;
+        // Pooling pour perf [web:8]
+        function initPool() {
+            obstaclePool = [];
+            for (let i = 0; i < 20; i++) {
+                obstaclePool.push({
+                    x: 0, y: 0, w: 0, h: 0, type: '', text: '', active: false
+                });
+            }
         }
 
-        // Accroupi (Duck)
-        if (keys.duck) {
-            rider.isDucking = true;
-            rider.height = rider.baseHeight * 0.6;
-        } else {
-            rider.isDucking = false;
-            rider.height = rider.baseHeight;
+        // Inputs pros (mobile + keyboard)
+        function setupInputs() {
+            // Clavier
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' || e.code === 'ArrowUp') {
+                    e.preventDefault();
+                    keys.jump = true;
+                }
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    keys.duck = true;
+                }
+                if (e.code === 'KeyP') togglePause();
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = false;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.duck = false;
+            });
+
+            // Boutons tactiles
+            const btns = ['btnJump', 'btnDuck'];
+            ['mousedown', 'touchstart'].forEach(evt => {
+                btns.forEach(id => {
+                    document.getElementById(id).addEventListener(evt, (e) => {
+                        e.preventDefault();
+                        if (id === 'btnJump') keys.jump = true;
+                        else keys.duck = true;
+                        document.getElementById(id).classList.add('active');
+                    });
+                });
+            });
+            ['mouseup', 'touchend', 'touchcancel'].forEach(evt => {
+                btns.forEach(id => {
+                    document.getElementById(id).addEventListener(evt, () => {
+                        keys.jump = false;
+                        keys.duck = false;
+                        document.getElementById(id).classList.remove('active');
+                    });
+                });
+            });
         }
 
-        // Physique
-        rider.dy += rider.gravity;
-        rider.y += rider.dy;
-
-        // Collision sol
-        const groundY = 320;
-        if (rider.y + rider.height > groundY) {
-            rider.y = groundY - rider.height;
-            rider.dy = 0;
-            rider.isGrounded = true;
+        // Particules pro [web:9]
+        function createParticles(x, y, color, count = 15) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10 - 2,
+                    life: 1,
+                    maxLife: 40,
+                    size: Math.random() * 4 + 2,
+                    color
+                });
+            }
         }
 
-        // Animation
-        rider.animFrame += 0.15 * gameSpeed;
-
-        // Difficulté croissante
-        gameSpeed += 0.0005;
-        score += 0.1 * gameSpeed;
-
-        // Obstacles
-        obstacleTimer++;
-        if (obstacleTimer > Math.max(50, 100 - (gameSpeed * 10))) {
-            spawnObstacle();
-            obstacleTimer = 0;
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2;
+                p.life--;
+                p.vx *= 0.98;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
         }
 
-        obstacles.forEach((obs, index) => {
-            obs.x -= 5 * gameSpeed;
-            
-            // Collision box (réduite pour être plus juste)
-            if (rider.x < obs.x + obs.w - 10 &&
-                rider.x + rider.width - 10 > obs.x &&
-                rider.y < obs.y + obs.h &&
-                rider.y + rider.height > obs.y) {
-                gameOver();
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        // Update logique
+        function update() {
+            if (gameState !== 'playing') return;
+
+            gameTime++;
+
+            // Inputs
+            if (keys.jump && rider.isGrounded) {
+                rider.dy = rider.jumpPower;
+                rider.isGrounded = false;
+                sounds.jump.currentTime = 0;
+                sounds.jump.play().catch(() => {});
+            }
+            rider.isDucking = keys.duck;
+            rider.height = rider.isDucking ? rider.baseHeight * 0.65 : rider.baseHeight;
+
+            // Physique
+            rider.dy += rider.gravity;
+            rider.y += rider.dy;
+
+            // Sol
+            const groundY = canvas.height - 120;
+            if (rider.y + rider.height > groundY) {
+                rider.y = groundY - rider.height;
+                rider.dy = 0;
+                rider.isGrounded = true;
             }
 
-            if (obs.x + obs.w < 0) obstacles.splice(index, 1);
-        });
+            // Animation
+            rider.animFrame += 0.2 * gameSpeed;
 
-        // Nuages
-        if (Math.random() < 0.01) clouds.push({ x: 800, y: Math.random() * 150, s: Math.random() + 0.5 });
-        clouds.forEach((c, i) => {
-            c.x -= c.s * gameSpeed;
-            if (c.x < -100) clouds.splice(i, 1);
-        });
+            // Progression
+            score += 0.15 * gameSpeed;
+            gameSpeed += 0.0008;
+            level = Math.floor(gameSpeed / 2) + 1;
 
-        document.getElementById('score').innerText = Math.floor(score);
-        document.getElementById('speed').innerText = gameSpeed.toFixed(1);
-    }
+            // Shake
+            if (shake > 0) {
+                shake--;
+            }
 
-    // --- DESSIN (RENDU) ---
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Obstacles intelligents
+            if (gameTime % Math.max(40, 80 - Math.floor(gameSpeed * 5)) === 0) {
+                spawnObstacle();
+            }
 
-        // Ciel dégradé
-        let grad = ctx.createLinearGradient(0, 0, 0, 400);
-        grad.addColorStop(0, '#4facfe');
-        grad.addColorStop(1, '#00f2fe');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Update obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x -= 6 * gameSpeed;
 
-        // Nuages
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        clouds.forEach(c => {
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, 20, 0, Math.PI * 2);
-            ctx.arc(c.x + 25, c.y - 10, 25, 0, Math.PI * 2);
-            ctx.arc(c.x + 50, c.y, 20, 0, Math.PI * 2);
-            ctx.fill();
-        });
+                // Collision précise
+                const dx = rider.x + rider.width/2 - (obs.x + obs.w/2);
+                const dy = rider.y + rider.height/2 - (obs.y + obs.h/2);
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < (rider.width + obs.w)/3) {
+                    gameOver();
+                    createParticles(rider.x + rider.width/2, rider.y + rider.height/2, '#FF6B35', 25);
+                    sounds.hit.play().catch(() => {});
+                    shake = 15;
+                    return;
+                }
 
-        // Sol
-        ctx.fillStyle = '#3e2723';
-        ctx.fillRect(0, 320, canvas.width, 80);
-        ctx.fillStyle = '#4CAF50';
-        ctx.fillRect(0, 320, canvas.width, 10);
+                if (obs.x + obs.w < -50) {
+                    obstacles.splice(i, 1);
+                }
+            }
 
-        // Dessin Rider (Cavalier)
-        drawRider();
+            // Nuages parallax
+            if (Math.random() < 0.008) {
+                clouds.push({ x: canvas.width, y: 50 + Math.random() * 100, speed: 0.5 + Math.random() * 0.5 });
+            }
+            clouds.forEach((c, i) => {
+                c.x -= c.speed * gameSpeed;
+                if (c.x < -100) clouds.splice(i, 1);
+            });
 
-        // Obstacles
-        // Obstacles (maintenant des blocs de code JS)
-        obstacles.forEach(obs => {
-            // Fond du bloc de code
-            ctx.fillStyle = "#282c34"; // Couleur style VS Code / Atom
-            ctx.beginPath();
-            ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 5);
-            ctx.fill();
-            
-            // Bordure colorée (syntax highlighting)
-            ctx.strokeStyle = obs.type === 'bird' ? '#c678dd' : '#98c379';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Texte JS
-            ctx.fillStyle = "#abb2bf";
-            ctx.font = "bold 14px 'Courier New', monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(obs.text, obs.x + obs.w/2, obs.y + 20);
-        });
-    }
-
-    function drawRider() {
-        ctx.save();
-        
-        // Effet de mouvement (inclinaison)
-        const tilt = rider.dy * 0.02;
-        ctx.translate(rider.x + rider.width/2, rider.y + rider.height/2);
-        ctx.rotate(tilt);
-
-        // Corps du cheval (simplifié pro)
-        ctx.fillStyle = '#8d6e63';
-        ctx.fillRect(-rider.width/2, -rider.height/4, rider.width, rider.height/2);
-        
-        // Tête
-        ctx.fillRect(rider.width/4, -rider.height/2, 20, 25);
-
-        // Cavalier
-        ctx.fillStyle = '#1565C0';
-        ctx.fillRect(-10, -rider.height/2 - 10, 20, 30);
-        
-        // Jambes animées
-        if (rider.isGrounded) {
-            const legMove = Math.sin(rider.animFrame) * 10;
-            ctx.fillStyle = '#5d4037';
-            ctx.fillRect(-15, 10, 8, 15 + legMove);
-            ctx.fillRect(5, 10, 8, 15 - legMove);
+            // Update UI
+            document.getElementById('score').textContent = Math.floor(score);
+            document.getElementById('level').textContent = level;
+            document.getElementById('highScore').textContent = Math.floor(highScore);
         }
 
-        ctx.restore();
-    }
+        // Rendu optimisé [web:10]
+        function draw() {
+            // Shake camera
+            ctx.save();
+            if (shake > 0) {
+                ctx.translate(Math.random() * shake - shake/2, Math.random() * shake - shake/2);
+            }
 
-    function spawnObstacle() {
-        const isBird = Math.random() > 0.7; // 30% de chance d'un obstacle volant
-        obstacles.push({
-            x: canvas.width,
-            y: isBird ? 220 : 280,
-            w: 40,
-            h: isBird ? 30 : 40,
-            type: isBird ? 'bird' : 'rock'
-        });
-    }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    function gameOver() {
-        gameRunning = false;
-        document.getElementById('gameOver').style.display = 'flex';
-        document.getElementById('finalScore').innerText = Math.floor(score);
-    }
+            // Dégradé ciel pro
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#4a90e2');
+            grad.addColorStop(0.5, '#87CEEB');
+            grad.addColorStop(1, '#00f2fe');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    function restartGame() {
-        score = 0;
-        gameSpeed = 1;
-        obstacles = [];
-        rider.y = 200;
-        gameRunning = true;
-        document.getElementById('gameOver').style.display = 'none';
-    }
+            // Nuages glow
+            ctx.fillStyle = "rgba(255,255,255,0.9)";
+            ctx.shadowColor = 'rgba(255,255,255,0.5)';
+            ctx.shadowBlur = 10;
+            clouds.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, 25, 0, Math.PI * 2);
+                ctx.arc(c.x + 30, c.y - 12, 30, 0, Math.PI * 2);
+                ctx.arc(c.x + 60, c.y, 25, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
 
-    function gameLoop() {
-        update();
-        draw();
-        requestAnimationFrame(gameLoop);
-    }
+            // Sol animé
+            ctx.fillStyle = '#2c5530';
+            ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(0, canvas.height - 90, canvas.width, 15);
+            // Ligne d'herbe animée
+            ctx.strokeStyle = '#81C784';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.beginPath();
+                ctx.moveTo(i + Math.sin(gameTime * 0.01 + i * 0.01) * 5, canvas.height - 90);
+                ctx.lineTo(i + 10 + Math.sin(gameTime * 0.015 + i * 0.01) * 5, canvas.height - 110);
+                ctx.stroke();
+            }
 
-    function spawnObstacle() {
-    const isBird = Math.random() > 0.7;
-    // Liste de fragments de code JS
-    const jsSnippets = ["ctx.fill()", "let x = 0;", "if(err)", "push()", "=> {}", "await", "true"];
-    const randomCode = jsSnippets[Math.floor(Math.random() * jsSnippets.length)];
+            // Rider amélioré
+            drawRider();
 
-    obstacles.push({
-        x: canvas.width,
-        y: isBird ? 220 : 280,
-        w: isBird ? 70 : 100, // On élargit un peu pour le texte
-        h: 30,
-        type: isBird ? 'bird' : 'rock',
-        text: randomCode // On stocke le texte ici
-    });
-}
+            // Obstacles code JS glow
+            obstacles.forEach(obs => {
+                // Glow
+                ctx.shadowColor = obs.type === 'bird' ? '#c678dd' : '#98c379';
+                ctx.shadowBlur = 15;
+                
+                // Bloc
+                ctx.fillStyle = "#1e1e1e";
+                ctx.beginPath();
+                ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 8);
+                ctx.fill();
 
-    // Initialisation
-    handleInputs();
-    gameLoop();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = obs.type === 'bird' ? '#c678dd' : '#98c379';
+                ctx.lineWidth = 3;
+                ctx.stroke();
 
-</script>
+                // Texte syntaxe
+                ctx.fillStyle = "#61AFEF";
+                ctx.font = "bold 16px 'Fira Code', 'Courier New', monospace";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(obs.text, obs.x + obs.w/2, obs.y + obs.h/2);
+            });
+
+            // Particules
+            drawParticles();
+
+            ctx.restore();
+        }
+
+        function drawRider() {
+            ctx.save();
+            ctx.translate(rider.x + rider.width/2, rider.y + rider.height/2);
+            ctx.rotate(rider.dy * 0.015);
+
+            // Cheval corps glow
+            ctx.shadowColor = '#8d6e63';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(-rider.width/2, -rider.height/3, rider.width, rider.height * 0.6);
+            ctx.shadowBlur = 0;
+
+            // Tête
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(rider.width/3, -rider.height/2.2, 25, 30);
+
+            // Cavalier
+            ctx.fillStyle = '#1565C0';
+            ctx.shadowColor = '#1565C0';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(-12, -rider.height/1.8, 24, 35);
+            ctx.shadowBlur = 0;
+
+            // Jambes animées
+            if (rider.isGrounded) {
+                const legOffset = Math.sin(rider.animFrame) * 12;
+                ctx.fillStyle = '#5D4037';
+                ctx.fillRect(-18, rider.height/6, 10, 20 + legOffset);
+                ctx.fillRect(8, rider.height/6, 10, 20 - legOffset);
+            }
+
+            ctx.restore();
+        }
+
+        function spawnObstacle() {
+            const jsSnippets = [
+                "ctx.fillRect()", "addEventListener()", "requestAnimationFrame()", 
+                "Math.random()", "gameState = 'playing'", "localStorage.setItem()",
+                "classList.add()", "await fetch()", "JSON.parse()", "canvas.getContext()"
+            ];
+            const isBird = Math.random() > 0.65;
+            const snippet = jsSnippets[Math.floor(Math.random() * jsSnippets.length)];
+
+            // Pool
+            const obs = obstaclePool.find(o => !o.active);
+            if (!obs) return;
+
+            obs.active = true;
+            obs.x = canvas.width + 50;
+            obs.y = isBird ? canvas.height - 220 : canvas.height - 140;
+            obs.w = isBird ? 85 : 110;
+            obs.h = 35;
+            obs.type = isBird ? 'bird' : 'code';
+            obs.text = snippet;
+            obstacles.push(obs);
+        }
+
+        // Écrans
+        function showTitle() {
+            gameState = 'title';
+            document.getElementById('titleScreen').classList.add('active');
+            document.getElementById('gameOver').classList.remove('active');
+        }
+
+        function startGame() {
+            gameState = 'playing';
+            document.getElementById('titleScreen').classList.remove('active');
+            sounds.music.play().catch(() => {});
+            resetGame();
+        }
+
+        function togglePause() {
+            if (gameState === 'playing') {
+                gameState = 'paused';
+                document.getElementById('pauseScreen').classList.add('active');
+                sounds.music.pause();
+            } else if (gameState === 'paused') {
+                gameState = 'playing';
+                document.getElementById('pauseScreen').classList.remove('active');
+                sounds.music.play().catch(() => {});
+            }
+        }
+
+        function gameOver() {
+            gameState = 'gameover';
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('cavalierHighScore', highScore);
+            }
+            document.getElementById('finalScore').textContent = Math.floor(score);
+            document.getElementById('gameOver').classList.add('active');
+            sounds.music.pause();
+        }
+
+        function resetGame() {
+            score = 0;
+            gameSpeed = 1;
+            level = 1;
+            gameTime = 0;
+            rider.y = canvas.height - 220;
+            rider.dy = 0;
+            rider.isGrounded = true;
+            obstacles = [];
+            clouds = [];
+            particles = [];
+            shake = 0;
+            initPool();
+        }
+
+        function restartGame() {
+            resetGame();
+            gameState = 'playing';
+            document.getElementById('gameOver').classList.remove('active');
+            sounds.music.play().catch(() => {});
+        }
+
+        // Loop principal 60fps [web:10]
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Init pro
+        setupInputs();
+        initPool();
+        document.getElementById('highScore').textContent = Math.floor(highScore);
+        showTitle();
+        gameLoop();
+    </script>
 </body>
 </html>
