@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cavalier Jumper Pro</title>
+    <style>
+        :root {
+            --primary: #FF6B35;
+            --dark: #2F3E46;
+            --sky: #87CEEB;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+            touch-action: none;
+        }
+        .game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 10px;
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .stat-box {
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 50px;
+            border: 2px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(5px);
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: var(--sky);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        /* Pavé Directionnel */
+        .controls-container {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            gap: 20px;
+        }
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(255,255,255,0.1);
+            border: 3px solid white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.1s;
+            touch-action: manipulation;
+        }
+        .control-btn:active {
+            background: var(--primary);
+            transform: scale(0.9);
+        }
+        .game-over-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 15px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .restart-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-wrapper">
+    <div class="ui-overlay">
+        <div class="stat-box">Score: <span id="score">0</span></div>
+        <div class="stat-box">Level: <span id="speed">1</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div class="game-over-screen" id="gameOver">
+        <h1 style="font-size: 3rem; margin-bottom: 0;">PERDU !</h1>
+        <p style="font-size: 1.5rem; color: #aaa;">Score final: <span id="finalScore">0</span></p>
+        <button class="restart-btn" onclick="restartGame()">Recommencer</button>
+    </div>
+
+    <div class="controls-container">
+        <div class="control-btn" id="btnDuck">BAS (S)</div>
+        <div class="control-btn" id="btnJump" style="width: 120px; border-radius: 20px;">SAUT (ESPACE)</div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Config de base
+    let gameRunning = true;
+    let score = 0;
+    let gameSpeed = 1;
+    let clouds = [];
+    
+    const rider = {
+        x: 80,
+        y: 300,
+        width: 50,
+        height: 70,
+        baseHeight: 70,
+        dy: 0,
+        gravity: 0.7,
+        jumpPower: 15,
+        isGrounded: false,
+        isDucking: false,
+        animFrame: 0
+    };
+
+    let obstacles = [];
+    let obstacleTimer = 0;
+
+    // --- GESTION DES INPUTS (Clavier + Tactile) ---
+    const keys = { jump: false, duck: false };
+
+    function handleInputs() {
+        // Clavier
+        window.onkeydown = (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = true;
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.duck = true;
+        };
+        window.onkeyup = (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = false;
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.duck = false;
+        };
+
+        // Boutons à l'écran
+        const btnJump = document.getElementById('btnJump');
+        const btnDuck = document.getElementById('btnDuck');
+
+        ['mousedown', 'touchstart'].forEach(evt => {
+            btnJump.addEventListener(evt, (e) => { e.preventDefault(); keys.jump = true; });
+            btnDuck.addEventListener(evt, (e) => { e.preventDefault(); keys.duck = true; });
+        });
+
+        ['mouseup', 'touchend'].forEach(evt => {
+            btnJump.addEventListener(evt, () => keys.jump = false);
+            btnDuck.addEventListener(evt, () => keys.duck = false);
+        });
+    }
+
+    // --- LOGIQUE DU JEU ---
+    function update() {
+        if (!gameRunning) return;
+
+        // Saut
+        if (keys.jump && rider.isGrounded) {
+            rider.dy = -rider.jumpPower;
+            rider.isGrounded = false;
+        }
+
+        // Accroupi (Duck)
+        if (keys.duck) {
+            rider.isDucking = true;
+            rider.height = rider.baseHeight * 0.6;
+        } else {
+            rider.isDucking = false;
+            rider.height = rider.baseHeight;
+        }
+
+        // Physique
+        rider.dy += rider.gravity;
+        rider.y += rider.dy;
+
+        // Collision sol
+        const groundY = 320;
+        if (rider.y + rider.height > groundY) {
+            rider.y = groundY - rider.height;
+            rider.dy = 0;
+            rider.isGrounded = true;
+        }
+
+        // Animation
+        rider.animFrame += 0.15 * gameSpeed;
+
+        // Difficulté croissante
+        gameSpeed += 0.0005;
+        score += 0.1 * gameSpeed;
+
+        // Obstacles
+        obstacleTimer++;
+        if (obstacleTimer > Math.max(50, 100 - (gameSpeed * 10))) {
+            spawnObstacle();
+            obstacleTimer = 0;
+        }
+
+        obstacles.forEach((obs, index) => {
+            obs.x -= 5 * gameSpeed;
+            
+            // Collision box (réduite pour être plus juste)
+            if (rider.x < obs.x + obs.w - 10 &&
+                rider.x + rider.width - 10 > obs.x &&
+                rider.y < obs.y + obs.h &&
+                rider.y + rider.height > obs.y) {
+                gameOver();
+            }
+
+            if (obs.x + obs.w < 0) obstacles.splice(index, 1);
+        });
+
+        // Nuages
+        if (Math.random() < 0.01) clouds.push({ x: 800, y: Math.random() * 150, s: Math.random() + 0.5 });
+        clouds.forEach((c, i) => {
+            c.x -= c.s * gameSpeed;
+            if (c.x < -100) clouds.splice(i, 1);
+        });
+
+        document.getElementById('score').innerText = Math.floor(score);
+        document.getElementById('speed').innerText = gameSpeed.toFixed(1);
+    }
+
+    // --- DESSIN (RENDU) ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Ciel dégradé
+        let grad = ctx.createLinearGradient(0, 0, 0, 400);
+        grad.addColorStop(0, '#4facfe');
+        grad.addColorStop(1, '#00f2fe');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Nuages
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        clouds.forEach(c => {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 20, 0, Math.PI * 2);
+            ctx.arc(c.x + 25, c.y - 10, 25, 0, Math.PI * 2);
+            ctx.arc(c.x + 50, c.y, 20, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Sol
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(0, 320, canvas.width, 80);
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(0, 320, canvas.width, 10);
+
+        // Dessin Rider (Cavalier)
+        drawRider();
+
+        // Obstacles
+        // Obstacles (maintenant des blocs de code JS)
+        obstacles.forEach(obs => {
+            // Fond du bloc de code
+            ctx.fillStyle = "#282c34"; // Couleur style VS Code / Atom
+            ctx.beginPath();
+            ctx.roundRect(obs.x, obs.y, obs.w, obs.h, 5);
+            ctx.fill();
+            
+            // Bordure colorée (syntax highlighting)
+            ctx.strokeStyle = obs.type === 'bird' ? '#c678dd' : '#98c379';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Texte JS
+            ctx.fillStyle = "#abb2bf";
+            ctx.font = "bold 14px 'Courier New', monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(obs.text, obs.x + obs.w/2, obs.y + 20);
+        });
+    }
+
+    function drawRider() {
+        ctx.save();
+        
+        // Effet de mouvement (inclinaison)
+        const tilt = rider.dy * 0.02;
+        ctx.translate(rider.x + rider.width/2, rider.y + rider.height/2);
+        ctx.rotate(tilt);
+
+        // Corps du cheval (simplifié pro)
+        ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(-rider.width/2, -rider.height/4, rider.width, rider.height/2);
+        
+        // Tête
+        ctx.fillRect(rider.width/4, -rider.height/2, 20, 25);
+
+        // Cavalier
+        ctx.fillStyle = '#1565C0';
+        ctx.fillRect(-10, -rider.height/2 - 10, 20, 30);
+        
+        // Jambes animées
+        if (rider.isGrounded) {
+            const legMove = Math.sin(rider.animFrame) * 10;
+            ctx.fillStyle = '#5d4037';
+            ctx.fillRect(-15, 10, 8, 15 + legMove);
+            ctx.fillRect(5, 10, 8, 15 - legMove);
+        }
+
+        ctx.restore();
+    }
+
+    function spawnObstacle() {
+        const isBird = Math.random() > 0.7; // 30% de chance d'un obstacle volant
+        obstacles.push({
+            x: canvas.width,
+            y: isBird ? 220 : 280,
+            w: 40,
+            h: isBird ? 30 : 40,
+            type: isBird ? 'bird' : 'rock'
+        });
+    }
+
+    function gameOver() {
+        gameRunning = false;
+        document.getElementById('gameOver').style.display = 'flex';
+        document.getElementById('finalScore').innerText = Math.floor(score);
+    }
+
+    function restartGame() {
+        score = 0;
+        gameSpeed = 1;
+        obstacles = [];
+        rider.y = 200;
+        gameRunning = true;
+        document.getElementById('gameOver').style.display = 'none';
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function spawnObstacle() {
+    const isBird = Math.random() > 0.7;
+    // Liste de fragments de code JS
+    const jsSnippets = ["ctx.fill()", "let x = 0;", "if(err)", "push()", "=> {}", "await", "true"];
+    const randomCode = jsSnippets[Math.floor(Math.random() * jsSnippets.length)];
+
+    obstacles.push({
+        x: canvas.width,
+        y: isBird ? 220 : 280,
+        w: isBird ? 70 : 100, // On élargit un peu pour le texte
+        h: 30,
+        type: isBird ? 'bird' : 'rock',
+        text: randomCode // On stocke le texte ici
+    });
+}
+
+    // Initialisation
+    handleInputs();
+    gameLoop();
+
+</script>
+</body>
+</html>
